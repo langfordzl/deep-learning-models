@@ -68,7 +68,7 @@ sorted_class_to_ix = collections.OrderedDict(sorted(class_to_ix.items()))
 
 
 # Load dataset images and resize to meet minimum width and height pixel size
-def load_images(root, min_side=224):
+def load_images(root, min_side=550):
     all_imgs = []
     all_classes = []
     resize_count = 0
@@ -104,8 +104,8 @@ def load_images(root, min_side=224):
     print(invalid_count, 'images skipped')
     return np.array(all_imgs), np.array(all_classes)
 
-X_train, y_train = load_images('train', min_side=224)
-X_val, y_val = load_images('validation', min_side=224)
+#X_train, y_train = load_images('train', min_side=550)
+#X_val, y_val = load_images('validation', min_side=224)
 
 def create_data(dir, num):
     datagen = image.ImageDataGenerator() 
@@ -117,19 +117,20 @@ def create_data(dir, num):
     return generator
 
 itr = train_generator = create_data('train', NTRAIN)
-X, y = itr.next()
-    
-    
+X_train, y_train = itr.next()
+
+itr = train_generator = create_data('validation', NVAL)
+X_val, y_val = itr.next()
+
 print('X_train shape', X_train.shape)
 print('y_train shape', y_train.shape)
 print('X_val shape', X_val.shape)
 print('y_val shape', y_val.shape)
 
 # View test image 
-#a = X[0]*255
+#a = X[0]
 #b = Image.fromarray(a.astype('uint8'), 'RGB')
     
-
 # train model
 def train_model(nepochs, app, weights, X_train, y_train, X_val, y_val):
     print('Initializing a fresh model to train.')
