@@ -1,90 +1,31 @@
 '''
-Training using the VGG network only
+Training using the InceptionV3 network only
 We are using the network for training only and not transfer learning/fine-tuning
 '''
-from keras.applications.vgg16 import VGG16
 from keras.preprocessing import image
 from keras.models import Model, load_model
-from keras.layers import Dense, Input
-from keras.layers.core import Flatten
+from keras.layers import Dense, Input, AveragePooling2D
+from keras.layers.core import Flatten, Dropout
 from keras.optimizers import SGD
-from sys import argv
-
 import matplotlib.pyplot as plt
 from PIL import Image
 import numpy as np
-from os import listdir
-from os.path import join
 ##############################################
 # taken from https://github.com/stratospark/food-101-keras
-import matplotlib.image as img
-from scipy.misc import imresize
-import collections
+
+from keras.applications.inception_v3 import InceptionV3
 from keras.callbacks import ModelCheckpoint
 ##############################################
 
 NUM_CLASSES = 2
-WIDTH = 224
-HEIGHT = 224
-BATCH_SIZE = 64
+WIDTH = 299
+HEIGHT = 299
+BATCH_SIZE = 32
 NEPOCH = 25
 NTRAIN = 2680  # the number of training images
 NVAL = 200  # the number of validation images
-app = VGG16
-weights = 'vgg16_model_custom.h5'
-
-
-import multiprocessing as mp
-num_processes = 6
-pool = mp.Pool(processes=num_processes)
-
-# create datasets
-class_to_ix = {}
-ix_to_class = {}
-with open('classes.txt', 'r') as txt:
-    classes = [l.strip() for l in txt.readlines()]
-    class_to_ix = dict(zip(classes, range(len(classes))))
-    ix_to_class = dict(zip(range(len(classes)), classes))
-    class_to_ix = {v: k for k, v in ix_to_class.items()}
-sorted_class_to_ix = collections.OrderedDict(sorted(class_to_ix.items()))
-
-
-# Load dataset images and resize to meet minimum width and height pixel size
-def load_images(root, min_side=550):
-    all_imgs = []
-    all_classes = []
-    resize_count = 0
-    invalid_count = 0
-    for i, subdir in enumerate(listdir(root)):
-        imgs = listdir(join(root, subdir))
-        class_ix = class_to_ix[subdir]
-        print(i, class_ix, subdir)
-        for img_name in imgs:
-            img_arr = img.imread(join(root, subdir, img_name))
-            img_arr_rs = img_arr
-            try:
-                w, h, _ = img_arr.shape
-                if w > min_side:
-                    #wpercent = (min_side/float(w))
-                    #hsize = int((float(h)*float(wpercent)))
-                    #print('new dims:', min_side, hsize)
-                    img_arr_rs = imresize(img_arr, (min_side, min_side))
-                    resize_count += 1
-                elif h > min_side:
-                    #hpercent = (min_side/float(h))
-                    #wsize = int((float(w)*float(hpercent)))
-                    #print('new dims:', wsize, min_side)
-                    img_arr_rs = imresize(img_arr, (min_side, min_side))
-                    resize_count += 1
-                all_imgs.append(img_arr_rs)
-                all_classes.append(class_ix)
-            except:
-                print('Skipping bad image: ', subdir, img_name)
-                invalid_count += 1
-    print(len(all_imgs), 'images loaded')
-    print(resize_count, 'images resized')
-    print(invalid_count, 'images skipped')
-    return np.array(all_imgs), np.array(all_classes)
+app = InceptionV3
+weights = 'inceptionv3_2classes.h5'
 
 def create_data(train_dir, val_dir):
     datagen_train = image.ImageDataGenerator(featurewise_center=False,
@@ -116,44 +57,14 @@ def create_data(train_dir, val_dir):
 
 train_generator, validation_generator = create_data('train', 'validation')
 
-def reverse_preprocess_input(x0):
-    x = x0 / 2.0
-    x += 0.5
-    x *= 255.
-    return x
-
-def show_images(test_generator, unprocess=True):
-    for x in test_generator:
-        fig, axes = plt.subplots(nrows=8, ncols=4)
-        fig.set_size_inches(8, 8)
-        page = 0
-        page_size = 32
-        start_i = page * page_size
-        for i, ax in enumerate(axes.flat):
-            img = x[0][i+start_i]
-            if unprocess:
-                im = ax.imshow( reverse_preprocess_input(img).astype('uint8') )
-            else:
-                im = ax.imshow(img)
-            ax.set_axis_off()
-            ax.title.set_visible(False)
-            ax.xaxis.set_ticks([])
-            ax.yaxis.set_ticks([])
-            for spine in ax.spines.values():
-                spine.set_visible(False)
-        plt.subplots_adjust(left=0, wspace=0, hspace=0)
-        plt.show()
-        break
-
-#show_images(unprocess=False)
-
-def train_keras_model(nepochs, app, NTRAIN, NVAL, train_generator, test_generator, BATCH_SIZE):
+def train_keras_model(nepochs, app, weights, NTRAIN, NVAL, train_generator, test_generator, BATCH_SIZE):
     print('Initializing a fresh model to train.')
     input_tensor = Input(shape=(HEIGHT, WIDTH, 3))  # tf ordering, i.e., height, width, channels
     base_model = app(input_tensor=input_tensor, include_top=False)
     x = base_model.output
+    x = AveragePooling2D(pool_size=(8, 8))(x)
+    x = Dropout(.4)(x)
     x = Flatten()(x)
-    x = Dense(4096, activation='relu')(x) 
     predictions = Dense(NUM_CLASSES, activation='softmax')(x)
     # this is the model we will train
     model = Model(input=input_tensor, output=predictions)
@@ -162,7 +73,7 @@ def train_keras_model(nepochs, app, NTRAIN, NVAL, train_generator, test_generato
     model.compile(optimizer=SGD(lr=0.0001, momentum=0.9), loss='categorical_crossentropy',metrics=['accuracy'])
     # print a summary of the model and then start training
     model.summary()
-    checkpointer = ModelCheckpoint(filepath='model4.{epoch:02d}-{val_loss:.2f}.hdf5', verbose=1, save_best_only=True)
+    checkpointer = ModelCheckpoint(filepath=weights, verbose=1, save_best_only=True)
     try:
         history = model.fit_generator(
             train_generator, 
@@ -177,7 +88,7 @@ def train_keras_model(nepochs, app, NTRAIN, NVAL, train_generator, test_generato
     #model.save(weights)
     return history 
 
-history = train_keras_model(NEPOCH, app, NTRAIN, NVAL, train_generator, validation_generator, BATCH_SIZE)
+history = train_keras_model(NEPOCH, app, weights, NTRAIN, NVAL, train_generator, validation_generator, BATCH_SIZE)
 
 def plot_training(history, acc, loss):
     ## summarize history for accuracy
