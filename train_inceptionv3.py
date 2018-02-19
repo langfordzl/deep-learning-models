@@ -14,12 +14,13 @@ import numpy as np
 # taken from https://github.com/stratospark/food-101-keras
 
 from keras.applications.inception_v3 import InceptionV3
-from keras.callbacks import ModelCheckpoint
+from keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
+
 ##############################################
 
 NUM_CLASSES = 2
-WIDTH = 299
-HEIGHT = 299
+WIDTH = 224
+HEIGHT = 224
 BATCH_SIZE = 32
 NEPOCH = 25
 NTRAIN = 2680  # the number of training images
@@ -73,7 +74,9 @@ def train_keras_model(nepochs, app, weights, NTRAIN, NVAL, train_generator, test
     model.compile(optimizer=SGD(lr=0.0001, momentum=0.9), loss='categorical_crossentropy',metrics=['accuracy'])
     # print a summary of the model and then start training
     model.summary()
-    checkpointer = ModelCheckpoint(filepath=weights, verbose=1, save_best_only=True)
+    checkpointer = ModelCheckpoint(filepath='inceptionv3_2classes_weights.hdf5', verbose=1, save_best_only=True)
+    earlyStopping = EarlyStopping(monitor='val_loss', patience=10, verbose=0, mode='min')
+    reduce_lr_loss = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=7, verbose=1, epsilon=1e-4, mode='min')
     try:
         history = model.fit_generator(
             train_generator, 
@@ -81,11 +84,11 @@ def train_keras_model(nepochs, app, weights, NTRAIN, NVAL, train_generator, test
             epochs=nepochs,
             validation_data=validation_generator,
             validation_steps=NVAL // BATCH_SIZE,
-            callbacks=[checkpointer])
+            callbacks=[checkpointer, earlyStopping, reduce_lr_loss])
     except KeyboardInterrupt as e:
         print('Got keyboard interrupt. Ending training.')    
-    #print('Saving model to h5 file!')
-    #model.save(weights)
+    print('Saving model to h5 file!')
+    model.save(weights)
     return history 
 
 history = train_keras_model(NEPOCH, app, weights, NTRAIN, NVAL, train_generator, validation_generator, BATCH_SIZE)
@@ -110,7 +113,7 @@ def plot_training(history, acc, loss):
     plt.savefig(loss)
     plt.close()
 
-plot_training(history, 'model_accuracy.pdf', 'model_loss.pdf')
+plot_training(history, 'InceptionV3model_accuracy.pdf', 'InceptionV3model_loss.pdf')
 
 
 #def run_test(weights, img, WIDTH, HEIGHT):
