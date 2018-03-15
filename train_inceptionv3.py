@@ -19,8 +19,8 @@ from keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
 ##############################################
 
 NUM_CLASSES = 2
-WIDTH = 224
-HEIGHT = 224
+WIDTH = 299
+HEIGHT = 299
 BATCH_SIZE = 32
 NEPOCH = 25
 NTRAIN = 2680  # the number of training images
